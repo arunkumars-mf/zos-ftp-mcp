@@ -1,6 +1,7 @@
 # z/OS FTP MCP Server
 
 [![PyPI version](https://img.shields.io/pypi/v/zos-ftp-mcp.svg)](https://pypi.org/project/zos-ftp-mcp/)
+[![Downloads](https://img.shields.io/pypi/dm/zos-ftp-mcp.svg)](https://pypi.org/project/zos-ftp-mcp/)
 [![Python versions](https://img.shields.io/pypi/pyversions/zos-ftp-mcp.svg)](https://pypi.org/project/zos-ftp-mcp/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
