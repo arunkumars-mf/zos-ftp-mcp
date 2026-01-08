@@ -16,7 +16,7 @@ Environment Variables:
     ZFTP_DOWNLOAD_PATH - Local download directory (default: /tmp)
 """
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 __author__ = "Arunkumar Selvam"
 __email__ = "aruninfy123@gmail.com"
 
