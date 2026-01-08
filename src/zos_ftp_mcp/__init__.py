@@ -16,14 +16,40 @@ Environment Variables:
     ZFTP_DOWNLOAD_PATH - Local download directory (default: /tmp)
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 __author__ = "Arunkumar Selvam"
 __email__ = "aruninfy123@gmail.com"
 
 from .server import run_server
+from .zos_ftp import ZosFtpClient
+from .models import ConnectionConfig, Dataset, Job, PDSMember, SpoolFile
+from .exceptions import (
+    ZosFtpError, ZosConnectionError, AuthenticationError,
+    JobNotFoundError, DatasetNotFoundError, JesInterfaceLevelError,
+    InvalidJobNameError, JclError, TransferError
+)
 
 def main() -> None:
     """Entry point for the MCP server."""
     run_server()
 
-__all__ = ["main", "run_server"]
+__all__ = [
+    "main",
+    "run_server",
+    "ZosFtpClient",
+    "ConnectionConfig",
+    "Dataset",
+    "Job",
+    "PDSMember",
+    "SpoolFile",
+    "ZosFtpError",
+    "ZosConnectionError",
+    "AuthenticationError",
+    "JobNotFoundError",
+    "DatasetNotFoundError",
+    "JesInterfaceLevelError",
+    "InvalidJobNameError",
+    "JclError",
+    "TransferError",
+]
+

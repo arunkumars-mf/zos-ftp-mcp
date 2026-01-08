@@ -9,8 +9,11 @@ A Model Context Protocol (MCP) server for interacting with z/OS mainframe system
 ## Features
 
 - List datasets from mainframe catalog with pattern matching
-- Download datasets in binary format
-- Download members from partitioned datasets (PDS)
+- Download datasets in binary and text formats with encoding conversion
+- Download members from partitioned datasets (PDS) with parallel support
+- Submit and monitor JCL jobs
+- Advanced text processing: encoding conversion, line ending control, trailing spaces handling
+- Configurable write protection for safe production use
 - Connection management via environment variables
 
 ## Installation
@@ -32,9 +35,48 @@ export ZFTP_HOST="your-mainframe-host"
 export ZFTP_PORT="21"
 export ZFTP_USER="your-username"
 export ZFTP_PASSWORD="your-password"
-export ZFTP_TIMEOUT="30.0"
+export ZFTP_TIMEOUT="600.0"
 export ZFTP_DOWNLOAD_PATH="/path/to/downloads"
+export ZFTP_DEBUG="false"  # Set to "true" for detailed FTP protocol logging
+export ZFTP_ALLOW_WRITE="false"  # Set to "true" to enable upload/submit operations
 ```
+
+### Advanced Text Processing
+
+Control how text files are downloaded from EBCDIC mainframe to ASCII/UTF-8:
+
+```bash
+# Character encoding conversion (EBCDIC to ASCII/UTF-8)
+export ZFTP_DEFAULT_ENCODING="IBM-037,UTF-8"  # US/Canada EBCDIC to UTF-8
+# Other options: IBM-1047,UTF-8 (Latin-1), IBM-285,UTF-8 (UK)
+
+# Line ending format
+export ZFTP_DEFAULT_LINE_ENDING="LF"  # Unix/Linux style
+# Options: CRLF (Windows), LF (Unix), CR (old Mac), NONE
+
+# Preserve trailing spaces in fixed-length records
+export ZFTP_PRESERVE_TRAILING_SPACES="false"  # Strip trailing spaces
+# Set to "true" to keep 80-character fixed-length records intact
+```
+
+**When to use these settings:**
+- **Encoding**: Essential for proper character conversion (JCL, COBOL, logs)
+- **Line endings**: Cross-platform compatibility, version control (Git)
+- **Trailing spaces**: Keep "false" for most text files, "true" for fixed-format data
+
+### Write Operations
+
+By default, the MCP server is **read-only** for safety. To enable write operations:
+
+```bash
+export ZFTP_ALLOW_WRITE="true"
+```
+
+When enabled, you can:
+- Upload files to mainframe datasets (`upload_dataset`)
+- Submit JCL jobs (`submit_job`)
+
+Use with caution in production environments. Read-only operations (list, download, monitor jobs) are always available.
 
 ## Usage
 
@@ -64,11 +106,23 @@ zos-ftp-mcp
 
 ## Tools Available
 
-- `list_catalog(pattern)` - List datasets matching pattern
-- `download_binary(source_dataset, target_file)` - Download dataset
-- `download_pds_members(dataset, target_dir, members, retr_mode, ftp_threads, batch_size)` - Download PDS members
+### Dataset Operations
+- `list_catalog(pattern, limit, offset)` - List datasets matching pattern with pagination
+- `download_binary(source_dataset, target_file)` - Download dataset in binary mode
+- `download_text(source_dataset, target_file, encoding, line_ending, preserve_trailing_spaces)` - Download with text processing
+- `download_pds_members(dataset, target_dir, members, encoding, line_ending, ...)` - Download PDS members with advanced options
+- `upload_dataset(source_file, target_dataset, binary, lrecl, blksize, recfm, space)` - Upload file to dataset (requires ZFTP_ALLOW_WRITE=true)
+- `get_vsam_info(dataset, limit, offset)` - Get VSAM dataset information with pagination (requires ZFTP_ALLOW_WRITE=true)
+- `get_gdg_info(gdg_base, limit, offset)` - Get GDG base attributes and generations with pagination (requires ZFTP_ALLOW_WRITE=true)
+
+### Job Operations
+- `submit_job(jcl, jobname)` - Submit JCL job (requires ZFTP_ALLOW_WRITE=true)
+- `list_jes_jobs(jobmask, owner, status, limit, offset)` - List jobs with filtering and pagination
+- `get_job_info(jobid)` - Get job details
+- `download_job_spool(jobid, target_file)` - Download job output with return code extraction
+
+### Connection Management
 - `get_connection_info()` - Show current connection settings
-- `set_connection_params(...)` - Update connection parameters
 
 ## Sample Usage Prompts
 
@@ -80,19 +134,107 @@ Once configured, you can use these prompts:
 "Show me all user datasets matching MYUSER.* pattern"
 
 ### Data Download
-"Download the dataset MYUSER.COBOL.SOURCE to my local downloads folder"
+"Download the dataset MYUSER.COBOL.SOURCE to my local downloads folder with UTF-8 encoding"
 
 "Download all members from the PDS MYUSER.COBOL.COPYLIB to a local directory"
+
+### Data Upload (requires ZFTP_ALLOW_WRITE=true)
+"Upload my local file test.jcl to dataset MYUSER.JCL.TEST with lrecl=80 and recfm=FB"
+
+"Upload local file member.cbl to PDS member MYUSER.COBOL.SOURCE(TESTPGM)"
+
+### Job Operations
+"Submit this JCL job and wait for completion" (requires ZFTP_ALLOW_WRITE=true)
+
+"List all my jobs that are in OUTPUT status"
+
+"Download the spool output for job JOB12345 and show me the return code"
 
 ### Connection Management
 "Show me the current FTP connection settings"
 
-"Update the download path to /Users/myname/mainframe-data"
-
 ## Dependencies
 
-- [zosftplib](https://pypi.org/project/zosftplib/) - z/OS FTP operations
 - [mcp](https://pypi.org/project/mcp/) - Model Context Protocol
+- Python 3.10+ standard library (ftplib, pathlib, etc.)
+
+## Advanced Features
+
+### Pagination Support
+
+To avoid overwhelming context windows with large result sets, several tools support pagination:
+
+**Tools with pagination:**
+- `list_catalog` - Paginate through datasets
+- `list_jes_jobs` - Paginate through jobs
+- `get_vsam_info` - Paginate through VSAM datasets
+- `get_gdg_info` - Paginate through GDG generations
+
+**Usage:**
+```python
+# Get first 50 datasets
+list_catalog('USER.*', limit=50)
+
+# Get next 50 datasets
+list_catalog('USER.*', limit=50, offset=50)
+
+# Get first 20 jobs
+list_jes_jobs(status='OUTPUT', limit=20)
+
+# Get first 10 GDG generations
+get_gdg_info('AWS.M2.CARDDEMO.TRANSACT.BKUP', limit=10)
+```
+
+**Response includes:**
+- `count` - Number of items returned in this page
+- `total` - Total number of items available
+- `offset` - Current offset
+- `has_more` - True if more items are available
+
+### JESINTERFACELEVEL Limitations
+
+The server automatically detects your mainframe's JES interface level. With **JESINTERFACELEVEL=1** (common in older systems):
+
+**Job Submission:**
+- Jobname in JCL must be `userid + exactly one character`
+- Example: If userid is `USER123`, jobname must be `USER123J`
+- The server validates this automatically and provides clear error messages
+
+**Job Listing:**
+- Server-side filtering may not work
+- Client-side filtering is applied automatically
+- Jobs may be purged quickly from spool
+
+**Workaround:** The server handles these limitations transparently. Just be aware that job retrieval may fail if jobs are purged quickly.
+
+### Parallel PDS Downloads
+
+Download PDS members faster using multiple FTP connections:
+
+```python
+# Sequential (default)
+download_pds_members(dataset, target_dir, members, ftp_threads=1)
+
+# Parallel (2-16 threads)
+download_pds_members(dataset, target_dir, members, ftp_threads=4)
+```
+
+Parallel downloads are significantly faster for large PDSs (>10 members).
+
+### Per-Operation Overrides
+
+While defaults are set via environment variables, you can override them per operation:
+
+```python
+# Use different line ending for specific file
+download_text(dataset, target_file, line_ending='CRLF')
+
+# Preserve trailing spaces for fixed-format data
+download_text(dataset, target_file, preserve_trailing_spaces=True)
+
+# Use different encoding
+download_pds_members(dataset, target_dir, members, encoding='IBM-1047,UTF-8')
+```
 
 ## License
 
